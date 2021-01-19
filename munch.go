@@ -45,13 +45,21 @@ type filter struct {
 	value      string
 }
 
+func (q *query) OrWhere(columnName, comparator, value string) {
+	q.addFilter(columnName, comparator, value, true)
+}
+
 func (q *query) Where(columnName, comparator, value string) {
-	q.AndWhere(columnName, comparator, value)
+	q.addFilter(columnName, comparator, value, false)
 }
 
 func (q *query) AndWhere(columnName, comparator, value string) {
+	q.addFilter(columnName, comparator, value, false)
+}
+
+func (q *query) addFilter(columnName, comparator, value string, isOr bool) {
 	q.where = append(q.where, filter{
-		isOr:       false,
+		isOr:       isOr,
 		columnName: columnName,
 		comparator: comparator,
 		value:      value,

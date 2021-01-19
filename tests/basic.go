@@ -18,8 +18,8 @@ func main() {
 	query := qb.Table("TEST_TABLE_1")
 
 	query.Where("Count", ">", "10")
-	query.Where("Age", ">", "5")
-	query.AndWhere("Name", "=", "Admiral Joshua")
+	query.AndWhere("Age", ">", "5")
+	query.OrWhere("Name", "=", "Admiral Joshua")
 
 	fmt.Println(query.ToSQL())
 
