@@ -8,6 +8,14 @@ import (
 	"strings"
 )
 
+// SQL Formatting directives
+const (
+	mysql_TableWrap = "`"
+	mysql_StringWrap = "\""
+	psql_TableWrap = "\""
+	psql_StringWrap = "'"
+)
+
 // SQL Operations - ENUM
 const (
 	sql_SELECT = iota
@@ -16,12 +24,55 @@ const (
 	sql_DELETE
 )
 
+// Client Types - ENUM
+const (
+	MySQL = iota
+	Postgres
+)
+
 // TODO: Configuration / Function to Initialise instance of SQL Builder
-type QueryBuilder struct {
+type queryBuilder struct {
 	conn *sql.DB
+	client int
 }
 
-func (q *QueryBuilder) Table(tableName string) *query {
+func NewQueryBuilder(config SQLConfig) (*queryBuilder, error) {
+	var (
+		connString string
+		driverName string
+		err error
+	)
+	switch config.Client {
+	case Postgres:
+		connString = fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s", config.Host, config.Port, config.User, config.Pass, config.DBName, config.SSLMode)
+		driverName = "postgres"
+		break
+	case MySQL:
+	default:
+		connString = fmt.Sprintf("%s:%s@tcp(%s:%d)/%s", config.User, config.Pass, config.Host, config.Port, config.DBName)
+		driverName = "mysql"
+		break
+	}
+
+	db, err := sql.Open(driverName, connString)
+	if err != nil {
+		return nil, err
+	}
+
+	return &queryBuilder{conn: db, client: config.Client}, nil
+}
+
+type SQLConfig struct {
+	Client int
+	Host string
+	Port int
+	User string
+	Pass string
+	DBName string
+	SSLMode string
+}
+
+func (q *queryBuilder) Table(tableName string) *query {
 	return &query{
 		parent:    q,
 		operation: sql_SELECT,
@@ -31,7 +82,7 @@ func (q *QueryBuilder) Table(tableName string) *query {
 
 // TODO: Query Predicate
 type query struct {
-	parent *QueryBuilder
+	parent *queryBuilder
 
 	operation int
 	table     string
@@ -171,7 +222,7 @@ func (q *query) Delete() {
 	q.operation = sql_DELETE
 }
 
-func formatValue(t reflect.Type, v reflect.Value) string {
+func formatValue(t reflect.Type, v reflect.Value, value_wrap string) string {
 	valStr := ""
 
 	switch t.Kind() {
@@ -191,7 +242,7 @@ func formatValue(t reflect.Type, v reflect.Value) string {
 			if i > 0 {
 				valList += ", "
 			}
-			valList += formatValue(vIdx.Type(), vIdx)
+			valList += formatValue(vIdx.Type(), vIdx, value_wrap)
 		}
 		if len(valList) > 0 {
 			valStr = fmt.Sprintf("(%s)", valList)
@@ -200,7 +251,7 @@ func formatValue(t reflect.Type, v reflect.Value) string {
 	default:
 		s := v.String()
 		if len(s) > 0 {
-			valStr = fmt.Sprintf("'%s'", v.String())
+			valStr = fmt.Sprintf("%s%s%s", value_wrap, v.String(), value_wrap)
 		}
 		break
 	}
@@ -208,20 +259,37 @@ func formatValue(t reflect.Type, v reflect.Value) string {
 	return valStr
 }
 
-func (q *query) ToSQL() string {
+func (q *query) SQL() string {
+	var (
+		wrap_table string
+		wrap_string string
+	)
+
+	switch q.parent.client {
+	case Postgres:
+		wrap_table = psql_TableWrap
+		wrap_string = psql_StringWrap
+		break
+	case MySQL:
+	default:
+		wrap_table = mysql_TableWrap
+		wrap_string = mysql_StringWrap
+		break
+	}
+
 	var sqlStr string
 	filterSql := ""
 	dataSql := ""
 
 	switch q.operation {
 	case sql_INSERT:
-		sqlStr = fmt.Sprintf("INSERT INTO `%s`", q.table)
+		sqlStr = fmt.Sprintf("INSERT INTO %s%s%s", wrap_table, q.table, wrap_table)
 		break
 	case sql_UPDATE:
-		sqlStr = fmt.Sprintf("UPDATE `%s`", q.table)
+		sqlStr = fmt.Sprintf("UPDATE %s%s%s", wrap_table, q.table, wrap_table)
 		break
 	case sql_DELETE:
-		sqlStr = fmt.Sprintf("DELETE FROM `%s`", q.table)
+		sqlStr = fmt.Sprintf("DELETE FROM %s%s%s", wrap_table, q.table, wrap_table)
 		break
 	default:
 		colString := "*"
@@ -230,7 +298,7 @@ func (q *query) ToSQL() string {
 			colString = "`" + strings.Join(q.columns, "`, `") + "`"
 		}
 
-		sqlStr = fmt.Sprintf("SELECT %s FROM `%s`", colString, q.table)
+		sqlStr = fmt.Sprintf("SELECT %s FROM %s%s%s", colString, wrap_table, q.table, wrap_table)
 		break
 	}
 
@@ -246,7 +314,7 @@ func (q *query) ToSQL() string {
 			fType := reflect.TypeOf(filter.value)
 			fValue := reflect.ValueOf(filter.value)
 
-			valStr = formatValue(fType, fValue)
+			valStr = formatValue(fType, fValue, wrap_string)
 
 			if len(valStr) > 2 {
 				predicate := "AND"
@@ -261,7 +329,7 @@ func (q *query) ToSQL() string {
 					filter.comparator = "IN"
 				}
 
-				filterSql += fmt.Sprintf(" %s `%s` %s %s%s%s", predicate, filter.columnName, filter.comparator, escape, valStr, escape)
+				filterSql += fmt.Sprintf(" %s %s%s%s %s %s%s%s", predicate, wrap_table, filter.columnName, wrap_table, filter.comparator, escape, valStr, escape)
 			}
 		}
 	}
@@ -276,7 +344,7 @@ func (q *query) ToSQL() string {
 				valT := reflect.TypeOf(val)
 				valV := reflect.ValueOf(val)
 
-				valString := formatValue(valT, valV)
+				valString := formatValue(valT, valV, wrap_string)
 
 				if len(valString) > 0 {
 					if first {
@@ -285,7 +353,7 @@ func (q *query) ToSQL() string {
 						cols += ", "
 						values += ", "
 					}
-					cols += "`" + col + "`"
+					cols += fmt.Sprintf("%s%s%s", wrap_table, col, wrap_table)
 
 					values += valString
 				}
@@ -299,7 +367,7 @@ func (q *query) ToSQL() string {
 				valT := reflect.TypeOf(val)
 				valV := reflect.ValueOf(val)
 
-				valString := formatValue(valT, valV)
+				valString := formatValue(valT, valV, wrap_string)
 
 				if len(valString) > 0 {
 
@@ -309,7 +377,7 @@ func (q *query) ToSQL() string {
 						colUpdates += ", "
 					}
 
-					colUpdates += fmt.Sprintf("`%s` = %s", col, valString)
+					colUpdates += fmt.Sprintf("%s%s%s = %s", wrap_table, col, wrap_table, valString)
 				}
 			}
 			dataSql += fmt.Sprintf(" SET %s", colUpdates)
@@ -319,6 +387,127 @@ func (q *query) ToSQL() string {
 	return sqlStr + dataSql + filterSql + ";"
 }
 
+/*func rowToStruct(row *sql.Rows, out interface{}) error {
+	outType := reflect.TypeOf(out)
+
+	colData, _ := row.Columns()
+	colDefs := getColumns(outType)
+
+
+
+	outValue := reflect.ValueOf(out)
+
+	for i := 0; i < outType.NumField(); i++ {
+		field := outType.Field(i)
+
+		outValue.Field(i)
+	}
+}*/
+
+func structToColumnNames(in interface{}) map[string]int {
+	retVal := make(map[string]int)
+
+	inT := reflect.TypeOf(in)
+
+	for i := 0; i < inT.NumField(); i++ {
+		field := inT.Field(i)
+		sqlTag := field.Tag.Get("sql")
+		if len(sqlTag) > 0 {
+			retVal[sqlTag] = i
+		} else {
+			retVal[field.Name] = i
+		}
+	}
+	return retVal
+}
+
+//func castTo
+
+func scanRow(row *sql.Rows, out interface{}) {
+	columns, _ := row.Columns()
+	count := len(columns)
+
+	values := make([]interface{}, count)
+	valuePtrs := make([]interface{}, count)
+
+	for i := range columns {
+		valuePtrs[i] = &values[i]
+	}
+
+	row.Scan(valuePtrs...)
+
+	structMap := structToColumnNames(out)
+
+	//outType := reflect.TypeOf(out)
+	outVal := reflect.ValueOf(out)
+
+	for i, colName := range columns {
+
+		target, ok := structMap[colName]
+
+		if ok {
+			switch outVal.Field(target).Kind() {
+			case reflect.Int64:
+				outVal.Field(target).SetInt(values[i].(int64))
+				break
+			case reflect.Bool:
+				outVal.Field(target).SetBool(values[i].(bool))
+				break
+			case reflect.Float64:
+				outVal.Field(target).SetFloat(values[i].(float64))
+				break
+			case reflect.String:
+			default:
+				outVal.Field(target).SetString(values[i].(string))
+				break
+			}
+		} else {
+			fmt.Printf("WARN - Target struct missing column def '%s' - ignoring...", colName)
+		}
+	}
+}
+
+func (q *query) Exec(out interface{}) error {
+
+
+	rows, err := q.parent.conn.Query(q.SQL())
+	if err != nil {
+		return err
+	}
+
+	outType := reflect.TypeOf(out)
+	outValue := reflect.ValueOf(out)
+
+	switch outType.Elem().Kind() {
+	case reflect.Slice:
+		//valueType := outValue.Index(0).Type()
+		for rows.Next() {
+			obj := reflect.New(outValue.Elem().Type())
+			scanRow(rows, &obj)
+			out = append([]interface{}{out}, obj)
+			//data = append(data, reflect.New(outValue.Elem().Type()))
+		}
+		break
+	case reflect.Struct:
+		row, err := q.parent.conn.Query(q.SQL())
+
+		if err != nil {
+			return err
+		}
+
+		if row.Next() {
+			scanRow(row, outValue.Interface())
+		} else {
+			return nil
+		}
+
+		break
+	default:
+		fmt.Printf("unrecognized type %d %s\n", outType.Kind(), outType.Name())
+	}
+
+	return nil
+}
 /*func (q *query) Execute(in interface{}, out interface{}) error {
 
 

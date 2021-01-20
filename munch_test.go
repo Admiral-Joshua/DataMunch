@@ -3,17 +3,33 @@ package munch
 import (
 	"fmt"
 	"testing"
+
+	_ "github.com/lib/pq"
 )
 
-var qb = &QueryBuilder{}
+var (
+	qb *queryBuilder
+)
 
-/*func TestInitialiseQB(t *testing.T) {
-	qb := &QueryBuilder{}
-
-	if qb == nil {
-		t.Error("initialisation of query builder interface failed")
+func TestInitialiseQueryBuilder(t *testing.T) {
+	cfg := SQLConfig{
+		Client: Postgres,
+		Host:   "localhost",
+		Port:   5432,
+		User:   "postgres",
+		Pass:   "postgres",
+		DBName: "EXTENSIONS_DB",
+		SSLMode: "disable",
 	}
-}*/
+
+	var err error
+	qb, err = NewQueryBuilder(cfg)
+
+	if err != nil {
+		t.Error(err)
+		t.Fail()
+	}
+}
 
 func assertEqual(actual, expected string) error {
 	if actual != expected {
@@ -31,7 +47,7 @@ func TestBasicRawSelect(t *testing.T) {
 	query.AndWhereRaw("Lastname", "=", "User")
 	query.AndWhereRaw("Email", "=", "test@test.com")
 
-	sql := query.ToSQL()
+	sql := query.SQL()
 
 	err := assertEqual(sql, "SELECT * FROM `TEST_TABLE_1` WHERE `Firstname` = 'Test' AND `Lastname` = 'User' AND `Email` = 'test@test.com';")
 
@@ -49,7 +65,7 @@ func TestWhereOr(t *testing.T) {
 	})
 	query.OrWhereRaw("Email", "=", "test@test.com")
 
-	sql := query.ToSQL()
+	sql := query.SQL()
 
 	err := assertEqual(sql, "SELECT * FROM `TEST_TABLE_1` WHERE `Firstname` = 'Test' OR `Email` = 'test@test.com';")
 	if err != nil {
@@ -73,7 +89,7 @@ func TestBasicInsert(t *testing.T) {
 		Email:     "test@test.com",
 	})
 
-	sql := query.ToSQL()
+	sql := query.SQL()
 
 	err := assertEqual(sql, "INSERT INTO `TEST_TABLE_2` (`Firstname`, `Lastname`, `Email`) VALUES ('Test', 'User', 'test@test.com');")
 
@@ -94,7 +110,7 @@ func TestBasicUpdate(t *testing.T) {
 		Email: "test@test.com",
 	})
 
-	sql := query.ToSQL()
+	sql := query.SQL()
 	err := assertEqual(sql, "UPDATE `TEST_TABLE_3` SET `Firstname` = 'Test', `Lastname` = 'User' WHERE `Email` = 'test@test.com';")
 
 	if err != nil {
@@ -109,7 +125,7 @@ func TestBasicDelete(t *testing.T) {
 	query.Where(BasicTestObject{Email: "test@test.com"})
 	query.Del()
 
-	sql := query.ToSQL()
+	sql := query.SQL()
 	err := assertEqual(sql, "DELETE FROM `TEST_TABLE_4` WHERE `Email` = 'test@test.com';")
 
 	if err != nil {
@@ -128,7 +144,7 @@ func TestWhereInString(t *testing.T) {
 	query.Where(WhereInObject{Usernames: []string{"Test", "Test2", "Test3"}})
 	//query.WhereRaw("Username", "IN", []string{"Test","Test2","Test3"})
 
-	sql := query.ToSQL()
+	sql := query.SQL()
 	err := assertEqual(sql, "SELECT * FROM `Users` WHERE `Username` IN ('Test', 'Test2', 'Test3');")
 
 	if err != nil {
@@ -150,7 +166,7 @@ func TestInsertWithTags(t *testing.T) {
 		GName: "Test Group 5",
 	})
 
-	sql := query.ToSQL()
+	sql := query.SQL()
 	err := assertEqual(sql, "INSERT INTO `UserGroups` (`GroupId`, `GroupName`) VALUES (5, 'Test Group 5');")
 
 	if err != nil {
@@ -164,7 +180,7 @@ func TestWhereInInt(t *testing.T) {
 	query := qb.Table("UserGroups")
 	query.WhereIn("GroupId", []int{1, 2, 3, 4}, false)
 
-	sql := query.ToSQL()
+	sql := query.SQL()
 	err := assertEqual(sql, "SELECT * FROM `UserGroups` WHERE `GroupId` IN (1, 2, 3, 4);")
 
 	if err != nil {
@@ -183,7 +199,7 @@ func TestMultipleWhereInOne(t *testing.T) {
 		{Email: "test@test.com"},
 	})
 
-	sql := query.ToSQL()
+	sql := query.SQL()
 	err := assertEqual(sql, "SELECT * FROM `TEST_TABLE_1` WHERE `Firstname` = 'Test' AND `Lastname` = 'User' AND `Email` = 'test@test.com';")
 
 	if err != nil {
@@ -198,7 +214,7 @@ func TestSelectSpecificColumns(t *testing.T) {
 	query.Where(BasicTestObject{Email: "test@test.com"})
 	query.Select([]string{"UserId", "Username"})
 
-	sql := query.ToSQL()
+	sql := query.SQL()
 	err := assertEqual(sql, "SELECT `UserId`, `Username` FROM `Users` WHERE `Email` = 'test@test.com';")
 
 	if err != nil {
@@ -224,10 +240,33 @@ func TestInsertComplexObject(t *testing.T) {
 		MyBool:  true,
 	})
 
-	sql := query.ToSQL()
+	sql := query.SQL()
 	err := assertEqual(sql, "INSERT INTO `ComplexTable` (`MyText`, `MyFloat`, `MyInt`, `MyBool`) VALUES ('Test', 5.66, 9, TRUE);")
 
 	if err != nil {
 		t.Error(err.Error())
 	}
+}
+
+type LunaUser struct {
+	UserID int64 `sql:"userId"`
+	Username string `sql:"username"`
+	Salt string `sql:"salt"`
+	Email string `sql:"email"`
+	Password string `sql:"password"`
+}
+
+func TestReadData(t *testing.T) {
+	query := qb.Table("luna_Users")
+	query.WhereRaw("userId", "=", "1")
+
+	fmt.Println("Executing SQL: " + query.SQL())
+
+	user := &LunaUser{}
+	err := query.Exec(user)
+	if err != nil {
+		t.Error(err.Error())
+	}
+
+	fmt.Printf("%+v", user)
 }
