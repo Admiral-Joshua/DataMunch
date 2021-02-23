@@ -232,17 +232,9 @@ func formatValue(t reflect.Type, v reflect.Value, value_wrap string) string {
 	}
 
 	switch t.Kind() {
-	case reflect.Int:
-	case reflect.Int8:
-	case reflect.Int16:
-	case reflect.Int32:
-	case reflect.Int64:
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		valStr = strconv.FormatInt(v.Int(), 10)
-	case reflect.Uint:
-	case reflect.Uint8:
-	case reflect.Uint16:
-	case reflect.Uint32:
-	case reflect.Uint64:
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		valStr = strconv.FormatUint(v.Uint(), 10)
 	case reflect.Bool:
 		valStr = strings.ToUpper(strconv.FormatBool(v.Bool()))
@@ -281,7 +273,6 @@ func (q *query) SQL() string {
 		wrap_table = psql_TableWrap
 		wrap_string = psql_StringWrap
 		break
-	case MySQL:
 	default:
 		wrap_table = mysql_TableWrap
 		wrap_string = mysql_StringWrap
@@ -306,7 +297,8 @@ func (q *query) SQL() string {
 		colString := "*"
 
 		if len(q.columns) > 0 {
-			colString = "`" + strings.Join(q.columns, "`, `") + "`"
+
+			colString = wrap_table + strings.Join(q.columns, fmt.Sprintf("%s, %s", wrap_table, wrap_table)) + wrap_table
 		}
 
 		sqlStr = fmt.Sprintf("SELECT %s FROM %s%s%s", colString, wrap_table, q.table, wrap_table)
@@ -399,40 +391,6 @@ func (q *query) SQL() string {
 	}
 
 	return sqlStr + dataSql + filterSql + ";"
-}
-
-/*func rowToStruct(row *sql.Rows, out interface{}) error {
-	outType := reflect.TypeOf(out)
-
-	colData, _ := row.Columns()
-	colDefs := getColumns(outType)
-
-
-
-	outValue := reflect.ValueOf(out)
-
-	for i := 0; i < outType.NumField(); i++ {
-		field := outType.Field(i)
-
-		outValue.Field(i)
-	}
-}*/
-
-func structToColumnNames(in interface{}) map[string]int {
-	retVal := make(map[string]int)
-
-	inT := reflect.TypeOf(in).Elem()
-
-	for i := 0; i < inT.NumField(); i++ {
-		field := inT.Field(i)
-		sqlTag := field.Tag.Get("sql")
-		if len(sqlTag) > 0 {
-			retVal[sqlTag] = i
-		} else {
-			retVal[field.Name] = i
-		}
-	}
-	return retVal
 }
 
 func getStructDef(out chan map[string]int, T reflect.Type) {

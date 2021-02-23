@@ -49,7 +49,7 @@ func TestBasicRawSelect(t *testing.T) {
 
 	sql := query.SQL()
 
-	err := assertEqual(sql, "SELECT * FROM `TEST_TABLE_1` WHERE `Firstname` = 'Test' AND `Lastname` = 'User' AND `Email` = 'test@test.com';")
+	err := assertEqual(sql, "SELECT * FROM \"TEST_TABLE_1\" WHERE \"Firstname\" = 'Test' AND \"Lastname\" = 'User' AND \"Email\" = 'test@test.com';")
 
 	if err != nil {
 		t.Error(err.Error())
@@ -67,7 +67,7 @@ func TestWhereOr(t *testing.T) {
 
 	sql := query.SQL()
 
-	err := assertEqual(sql, "SELECT * FROM `TEST_TABLE_1` WHERE `Firstname` = 'Test' OR `Email` = 'test@test.com';")
+	err := assertEqual(sql, "SELECT * FROM \"TEST_TABLE_1\" WHERE \"Firstname\" = 'Test' OR \"Email\" = 'test@test.com';")
 	if err != nil {
 		t.Error(err.Error())
 	}
@@ -91,7 +91,7 @@ func TestBasicInsert(t *testing.T) {
 
 	sql := query.SQL()
 
-	err := assertEqual(sql, "INSERT INTO `TEST_TABLE_2` (`Firstname`, `Lastname`, `Email`) VALUES ('Test', 'User', 'test@test.com');")
+	err := assertEqual(sql, "INSERT INTO \"TEST_TABLE_2\" (\"Firstname\", \"Lastname\", \"Email\") VALUES ('Test', 'User', 'test@test.com');")
 
 	if err != nil {
 		t.Error(err.Error())
@@ -111,7 +111,7 @@ func TestBasicUpdate(t *testing.T) {
 	})
 
 	sql := query.SQL()
-	err := assertEqual(sql, "UPDATE `TEST_TABLE_3` SET `Firstname` = 'Test', `Lastname` = 'User' WHERE `Email` = 'test@test.com';")
+	err := assertEqual(sql, "UPDATE \"TEST_TABLE_3\" SET \"Firstname\" = 'Test', \"Lastname\" = 'User' WHERE \"Email\" = 'test@test.com';")
 
 	if err != nil {
 		t.Error(err.Error())
@@ -126,7 +126,7 @@ func TestBasicDelete(t *testing.T) {
 	query.Del()
 
 	sql := query.SQL()
-	err := assertEqual(sql, "DELETE FROM `TEST_TABLE_4` WHERE `Email` = 'test@test.com';")
+	err := assertEqual(sql, "DELETE FROM \"TEST_TABLE_4\" WHERE \"Email\" = 'test@test.com';")
 
 	if err != nil {
 		t.Error(err.Error())
@@ -145,7 +145,7 @@ func TestWhereInString(t *testing.T) {
 	//query.WhereRaw("Username", "IN", []string{"Test","Test2","Test3"})
 
 	sql := query.SQL()
-	err := assertEqual(sql, "SELECT * FROM `Users` WHERE `Username` IN ('Test', 'Test2', 'Test3');")
+	err := assertEqual(sql, "SELECT * FROM \"Users\" WHERE \"Username\" IN ('Test', 'Test2', 'Test3');")
 
 	if err != nil {
 		t.Error(err.Error())
@@ -167,7 +167,7 @@ func TestInsertWithTags(t *testing.T) {
 	})
 
 	sql := query.SQL()
-	err := assertEqual(sql, "INSERT INTO `UserGroups` (`GroupId`, `GroupName`) VALUES (5, 'Test Group 5');")
+	err := assertEqual(sql, "INSERT INTO \"UserGroups\" (\"GroupId\", \"GroupName\") VALUES (5, 'Test Group 5');")
 
 	if err != nil {
 		t.Error(err.Error())
@@ -181,7 +181,7 @@ func TestWhereInInt(t *testing.T) {
 	query.WhereIn("GroupId", []int{1, 2, 3, 4}, false)
 
 	sql := query.SQL()
-	err := assertEqual(sql, "SELECT * FROM `UserGroups` WHERE `GroupId` IN (1, 2, 3, 4);")
+	err := assertEqual(sql, "SELECT * FROM \"UserGroups\" WHERE \"GroupId\" IN (1, 2, 3, 4);")
 
 	if err != nil {
 		t.Error(err.Error())
@@ -189,7 +189,7 @@ func TestWhereInInt(t *testing.T) {
 }
 
 // TestMultipleWhereInOne
-// Expects: SELECT * FROM `TEST_TABLE_1` WHERE `Firstname` = 'Test' AND `Lastname` = 'User' AND `Email` = 'test@test.com';
+// Expects: SELECT * FROM \"TEST_TABLE_1\" WHERE \"Firstname\" = 'Test' AND \"Lastname\" = 'User' AND \"Email\" = 'test@test.com';
 func TestMultipleWhereInOne(t *testing.T) {
 	query := qb.Table("TEST_TABLE_1")
 
@@ -200,7 +200,7 @@ func TestMultipleWhereInOne(t *testing.T) {
 	})
 
 	sql := query.SQL()
-	err := assertEqual(sql, "SELECT * FROM `TEST_TABLE_1` WHERE `Firstname` = 'Test' AND `Lastname` = 'User' AND `Email` = 'test@test.com';")
+	err := assertEqual(sql, "SELECT * FROM \"TEST_TABLE_1\" WHERE \"Firstname\" = 'Test' AND \"Lastname\" = 'User' AND \"Email\" = 'test@test.com';")
 
 	if err != nil {
 		t.Error(err.Error())
@@ -208,14 +208,14 @@ func TestMultipleWhereInOne(t *testing.T) {
 }
 
 // TestSelectSpecificColumns
-// Expects: SELECT `UserId`, `Username` FROM `Users` WHERE `Email` = 'test@test.com';
+// Expects: SELECT \"UserId\", \"Username\" FROM \"Users\" WHERE \"Email\" = 'test@test.com';
 func TestSelectSpecificColumns(t *testing.T) {
 	query := qb.Table("Users")
 	query.Where(BasicTestObject{Email: "test@test.com"})
 	query.Select([]string{"UserId", "Username"})
 
 	sql := query.SQL()
-	err := assertEqual(sql, "SELECT `UserId`, `Username` FROM `Users` WHERE `Email` = 'test@test.com';")
+	err := assertEqual(sql, "SELECT \"UserId\", \"Username\" FROM \"Users\" WHERE \"Email\" = 'test@test.com';")
 
 	if err != nil {
 		t.Error(err.Error())
@@ -230,7 +230,7 @@ type ComplexTestObj struct {
 }
 
 // TestInsertComplexObject
-// Expects: INSERT INTO `ComplexTable` (`MyText`, `MyFloat`, `MyInt`, `MyBool`) VALUES ('Test', 5.66, 9, TRUE);
+// Expects: INSERT INTO \"ComplexTable\" (\"MyText\", \"MyFloat\", \"MyInt\", \"MyBool\") VALUES ('Test', 5.66, 9, TRUE);
 func TestInsertComplexObject(t *testing.T) {
 	query := qb.Table("ComplexTable")
 	query.Insert(ComplexTestObj{
@@ -241,7 +241,7 @@ func TestInsertComplexObject(t *testing.T) {
 	})
 
 	sql := query.SQL()
-	err := assertEqual(sql, "INSERT INTO `ComplexTable` (`MyText`, `MyFloat`, `MyInt`, `MyBool`) VALUES ('Test', 5.66, 9, TRUE);")
+	err := assertEqual(sql, "INSERT INTO \"ComplexTable\" (\"MyText\", \"MyFloat\", \"MyInt\", \"MyBool\") VALUES ('Test', 5.66, 9, TRUE);")
 
 	if err != nil {
 		t.Error(err.Error())
@@ -283,7 +283,15 @@ func TestReadData(t *testing.T) {
 
 	if err != nil {
 		t.Error(err.Error())
-	}
+	} else {
 
-	fmt.Printf("%+v", user)
+		if user.Email == "admiraljrn@outlook.com" &&
+			user.Username == "Admiral Joshua" &&
+			user.UserID == 1 {
+			// Success - do nothing
+		} else {
+			t.Error("one or more data values retrieved did not match expected values")
+		}
+
+	}
 }
