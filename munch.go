@@ -225,16 +225,29 @@ func (q *query) Delete() {
 func formatValue(t reflect.Type, v reflect.Value, value_wrap string) string {
 	valStr := ""
 
+	if t.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			return ""
+		}
+	}
+
 	switch t.Kind() {
 	case reflect.Int:
+	case reflect.Int8:
+	case reflect.Int16:
+	case reflect.Int32:
+	case reflect.Int64:
 		valStr = strconv.FormatInt(v.Int(), 10)
-		break
+	case reflect.Uint:
+	case reflect.Uint8:
+	case reflect.Uint16:
+	case reflect.Uint32:
+	case reflect.Uint64:
+		valStr = strconv.FormatUint(v.Uint(), 10)
 	case reflect.Bool:
 		valStr = strings.ToUpper(strconv.FormatBool(v.Bool()))
-		break
 	case reflect.Float64:
 		valStr = strconv.FormatFloat(v.Float(), 'f', -1, 64)
-		break
 	case reflect.Slice:
 		valList := ""
 		for i := 0; i < v.Len(); i++ {
@@ -247,13 +260,11 @@ func formatValue(t reflect.Type, v reflect.Value, value_wrap string) string {
 		if len(valList) > 0 {
 			valStr = fmt.Sprintf("(%s)", valList)
 		}
-		break
 	default:
 		s := v.String()
 		if len(s) > 0 {
 			valStr = fmt.Sprintf("%s%s%s", value_wrap, v.String(), value_wrap)
 		}
-		break
 	}
 
 	return valStr
@@ -344,7 +355,10 @@ func (q *query) SQL() string {
 				valT := reflect.TypeOf(val)
 				valV := reflect.ValueOf(val)
 
-				valString := formatValue(valT, valV, wrap_string)
+				valString := ""
+				if val != nil {
+					 valString = formatValue(valT, valV, wrap_string)
+				}
 
 				if len(valString) > 0 {
 					if first {
@@ -407,7 +421,7 @@ func (q *query) SQL() string {
 func structToColumnNames(in interface{}) map[string]int {
 	retVal := make(map[string]int)
 
-	inT := reflect.TypeOf(in)
+	inT := reflect.TypeOf(in).Elem()
 
 	for i := 0; i < inT.NumField(); i++ {
 		field := inT.Field(i)
@@ -421,7 +435,20 @@ func structToColumnNames(in interface{}) map[string]int {
 	return retVal
 }
 
-//func castTo
+func getStructDef(out chan map[string]int, T reflect.Type) {
+	structIdx := make(map[string]int)
+	for i := 0; i < T.NumField(); i++ {
+		nameOverride := T.Field(i).Tag.Get("sql")
+
+		if len(nameOverride) < 1{
+			nameOverride = T.Field(i).Name
+		}
+
+		structIdx[nameOverride] = i
+	}
+
+	out <- structIdx
+}
 
 func scanRow(row *sql.Rows, out interface{}) {
 	columns, _ := row.Columns()
@@ -430,90 +457,85 @@ func scanRow(row *sql.Rows, out interface{}) {
 	values := make([]interface{}, count)
 	valuePtrs := make([]interface{}, count)
 
+	outType := reflect.TypeOf(out).Elem()
+
+	// ASYNC - Use the struct definition to map SQL column names to Field indexes.
+	structChan := make(chan map[string]int, 1)
+	// .Elem() looks underneath the pointer to the struct type itself.
+	go getStructDef(structChan, outType)
+
+	// Populate the slice of pointers with references to actual values.
 	for i := range columns {
 		valuePtrs[i] = &values[i]
 	}
 
+	// Scan row content into the points.
 	row.Scan(valuePtrs...)
 
-	structMap := structToColumnNames(out)
+	// Now look under the pointer to the value itself.
+	val := reflect.ValueOf(out).Elem()
 
-	//outType := reflect.TypeOf(out)
-	outVal := reflect.ValueOf(out)
+	// Retrieve the result from the async struct processor.
+	structIdx := <- structChan
 
+	// Now reflect the result retrieved from DB into the struct.
 	for i, colName := range columns {
+		field := val.Field(structIdx[colName])
 
-		target, ok := structMap[colName]
-
-		if ok {
-			switch outVal.Field(target).Kind() {
-			case reflect.Int64:
-				outVal.Field(target).SetInt(values[i].(int64))
-				break
-			case reflect.Bool:
-				outVal.Field(target).SetBool(values[i].(bool))
-				break
-			case reflect.Float64:
-				outVal.Field(target).SetFloat(values[i].(float64))
-				break
-			case reflect.String:
-			default:
-				outVal.Field(target).SetString(values[i].(string))
-				break
-			}
+		if field.Kind() == reflect.Ptr {
+			field.Set(reflect.ValueOf(&values[i]))
 		} else {
-			fmt.Printf("WARN - Target struct missing column def '%s' - ignoring...", colName)
+			field.Set(reflect.ValueOf(values[i]))
 		}
+
 	}
 }
 
 func (q *query) Exec(out interface{}) error {
 
-
+	// Run the SQL statement constructed this far.
 	rows, err := q.parent.conn.Query(q.SQL())
 	if err != nil {
 		return err
 	}
 
-	outType := reflect.TypeOf(out)
-	outValue := reflect.ValueOf(out)
+	// Don't bother trying to retrieve any results, if no result object was passed
+	if out == nil || reflect.ValueOf(out).IsNil() {
+		return nil
+	}
 
-	switch outType.Elem().Kind() {
+	outType := reflect.TypeOf(out)
+
+	if outType.Kind() == reflect.Ptr {
+		outType = outType.Elem()
+	}
+
+	switch outType.Kind() {
 	case reflect.Slice:
-		//valueType := outValue.Index(0).Type()
+		// Get the type under the slice...
+
+		// For each row...
 		for rows.Next() {
-			obj := reflect.New(outValue.Elem().Type())
+			// Create new struct to store this row.
+			obj := reflect.New(outType.Elem())
+
 			scanRow(rows, &obj)
-			out = append([]interface{}{out}, obj)
-			//data = append(data, reflect.New(outValue.Elem().Type()))
+
+			out = append(out.([]interface{}), obj)
 		}
-		break
+
 	case reflect.Struct:
 		row, err := q.parent.conn.Query(q.SQL())
-
 		if err != nil {
 			return err
 		}
 
 		if row.Next() {
-			scanRow(row, outValue.Interface())
+			scanRow(row, out)
 		} else {
 			return nil
 		}
-
-		break
-	default:
-		fmt.Printf("unrecognized type %d %s\n", outType.Kind(), outType.Name())
 	}
 
 	return nil
 }
-/*func (q *query) Execute(in interface{}, out interface{}) error {
-
-
-
-	if in != nil {
-
-	}
-	return nil
-}*/

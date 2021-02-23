@@ -256,14 +256,31 @@ type LunaUser struct {
 	Password string `sql:"password"`
 }
 
+func TestRunInsert(t *testing.T) {
+	query := qb.Table("luna_Users")
+	query.Insert(LunaUser{
+		Username: "TestUser",
+		Salt:     "1234",
+		Email:    "test@test.com",
+		Password: "test123456789",
+	})
+
+	err := query.Exec(nil)
+
+	if err != nil {
+		t.Error(err.Error())
+	}
+}
+
 func TestReadData(t *testing.T) {
 	query := qb.Table("luna_Users")
-	query.WhereRaw("userId", "=", "1")
+	//query.WhereRaw("userId", "=", "1")
 
 	fmt.Println("Executing SQL: " + query.SQL())
 
 	user := &LunaUser{}
 	err := query.Exec(user)
+
 	if err != nil {
 		t.Error(err.Error())
 	}
