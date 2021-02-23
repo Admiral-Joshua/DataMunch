@@ -272,6 +272,20 @@ func TestRunInsert(t *testing.T) {
 	}
 }
 
+func TestRunDelete(t *testing.T) {
+	query := qb.Table("luna_Users")
+	query.Where(LunaUser{
+		Username: "TestUser",
+	})
+	query.Delete()
+
+	err := query.Exec(nil)
+
+	if err != nil {
+		t.Error(err.Error())
+	}
+}
+
 func TestReadData(t *testing.T) {
 	query := qb.Table("luna_Users")
 	//query.WhereRaw("userId", "=", "1")
